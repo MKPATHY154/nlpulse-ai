@@ -13,6 +13,8 @@ python -m venv .venv
 # Windows PowerShell
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+# For the dashboard and test tools
+pip install -r requirements-dev.txt
 ```
 
 ## Run
