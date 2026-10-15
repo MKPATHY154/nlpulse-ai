@@ -4,6 +4,12 @@
 
 NLPulse AI turns unstructured emails and documents into searchable, structured intelligence. It provides a CPU-friendly local dashboard and FastAPI service for ingestion, analysis, persistence, machine-learning classification, and similarity search.
 
+## Live application preview
+
+![NLPulse AI live application](docs/live-app-screenshot.png)
+
+The screenshot shows the live analysis workflow with classification, sentiment, urgency, summary, entities, and extracted keywords.
+
 ## Setup
 
 Use Python 3.10+ and create a virtual environment:
