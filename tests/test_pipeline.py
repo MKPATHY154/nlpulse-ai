@@ -36,3 +36,26 @@ def test_entity_extraction_finds_common_contact_entities() -> None:
     assert ("email", "support@example.com") in entities
     assert ("date", "2026-10-16") in entities
     assert ("url", "https://example.com") in entities
+
+
+def test_entity_extraction_handles_written_dates_and_money_without_overlap() -> None:
+    result = analyze_text("The invoice of $1,250.00 is due on 20 October 2026; call +44 20 7946 0958.")
+
+    entities = {(entity["type"], entity["text"]) for entity in result["entities"]}
+    assert ("date", "20 October 2026") in entities
+    assert ("money", "$1,250.00") in entities
+    assert ("phone", "+44 20 7946 0958") in entities
+    assert not any(entity["type"] == "phone" and "20 October" in entity["text"] for entity in result["entities"])
+
+
+def test_summary_selects_informative_sentences_in_source_order() -> None:
+    result = analyze_text(
+        "The request was received this morning. The payment failed because the account is locked. "
+        "Support reset the account and confirmed the payment can be retried."
+    )
+
+    assert result["summary"] == (
+        "The payment failed because the account is locked. "
+        "Support reset the account and confirmed the payment can be retried."
+    )
+    assert result["processing_summary"]["summary_sentence_count"] == 2

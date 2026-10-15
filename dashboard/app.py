@@ -10,7 +10,6 @@ from src.ingestion import ExtractionError, extract_text
 from src.pipeline import analyze_text
 from src.search_engine import SearchEngine
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE = Database(ROOT / "data" / "nlpulse.db")
 
@@ -29,41 +28,80 @@ def save_result(name: str, result: dict[str, Any], source: str = "dashboard") ->
     return document_id
 
 
+def _chips(values: list[Any], st: Any, prefix: str = "") -> None:
+    if not values:
+        st.caption("Nothing detected yet")
+        return
+    labels = [value if isinstance(value, str) else value.get("text", "") for value in values]
+    st.markdown(" ".join(f"`{label}`" for label in labels if label))
+
+
 def render_result(result: dict[str, Any], st: Any) -> None:
     classification, urgency, sentiment = result["classification"], result["urgency"], result["sentiment"]
+    st.markdown("### Analysis ready")
     columns = st.columns(3)
-    columns[0].metric("Classification", classification["label"], f"{classification['confidence']:.0%}")
+    columns[0].metric("Classification", classification["label"], f"{classification['confidence']:.0%} confidence")
     columns[1].metric("Urgency", urgency["level"], f"score {urgency['score']}")
     columns[2].metric("Sentiment", sentiment["label"], f"score {sentiment['score']:.2f}")
-    st.subheader("Summary")
-    st.write(result["summary"] or "No summary available.")
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Entities")
-        st.dataframe(result["entities"], use_container_width=True)
-    with right:
-        st.subheader("Keywords")
-        st.write(", ".join(result["keywords"]) or "No keywords found.")
-    with st.expander("Original text and details"):
-        st.text_area("Normalized text", result["text"], height=150, disabled=True)
-        st.json(result)
+    result_tab, signals_tab, source_tab = st.tabs(["Overview", "Signals", "Source & details"])
+    with result_tab:
+        st.markdown("#### Executive summary")
+        st.info(result["summary"] or "No summary available.")
+        st.progress(min(1.0, max(0.0, float(classification["confidence"]))), text="Classification confidence")
+    with signals_tab:
+        left, right = st.columns(2)
+        with left:
+            st.markdown("#### Entities")
+            if result["entities"]:
+                st.dataframe(result["entities"], use_container_width=True, hide_index=True)
+            else:
+                st.caption("No named entities found in this text.")
+        with right:
+            st.markdown("#### Keywords")
+            _chips(result["keywords"], st)
+            st.markdown("#### Matched urgency terms")
+            _chips(urgency.get("matched_terms", []), st)
+    with source_tab:
+        with st.expander("View normalized text", expanded=True):
+            st.text_area("Normalized text", result["text"], height=150, disabled=True, label_visibility="collapsed")
+        with st.expander("View complete result JSON"):
+            st.json(result)
 
 
 def main() -> None:
     import streamlit as st
 
-    st.set_page_config(page_title="NLPulse AI", page_icon="🧠", layout="wide")
-    st.title("NLPulse AI")
-    st.caption("Intelligent document and email understanding platform")
-    analyze_tab, search_tab, history_tab = st.tabs(["Analyze", "Search", "History"])
-
+    st.set_page_config(page_title="NLPulse AI", page_icon="✦", layout="wide", initial_sidebar_state="expanded")
+    st.markdown("""<style>
+    .block-container{padding-top:2.2rem;padding-bottom:3rem;max-width:1400px}.hero{padding:1.5rem 0 1rem}.hero h1{font-size:3.2rem;letter-spacing:-.06em;margin-bottom:.25rem;background:linear-gradient(90deg,#8d7cff,#50d8d0);-webkit-background-clip:text;color:transparent}.hero p{color:#8490ad;font-size:1.05rem}.stMetric{background:linear-gradient(135deg,#161d38,#11172c);border:1px solid #ffffff14;padding:1rem;border-radius:14px}.stTabs [data-baseweb="tab-list"]{gap:8px}.stTabs [data-baseweb="tab"]{padding:10px 16px;border-radius:9px}.empty{padding:3.5rem 1rem;text-align:center;border:1px dashed #ffffff25;border-radius:16px;color:#8792ad}.sample{font-size:.8rem;color:#8490ad}
+    </style>""", unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("## ✦ NLPulse AI")
+        st.caption("Local intelligence workspace")
+        st.divider()
+        st.markdown("**Quick start**")
+        st.caption("Choose a sample to populate the analyzer, or bring your own document.")
+        samples = {
+            "Overdue invoice": "Urgent: the invoice is overdue and payment must be completed before Friday.",
+            "Happy customer": "Thanks for the excellent support. The team solved my issue quickly and kindly.",
+            "Support request": "My account is locked and I cannot access any of my files. Please help.",
+        }
+        for label, sample in samples.items():
+            if st.button(label, use_container_width=True):
+                st.session_state["sample_text"] = sample
+        st.divider()
+        st.markdown("**Pipeline**")
+        st.success("Analysis engine online")
+        st.caption("Results are processed locally and saved to the document history when you analyze.")
+    st.markdown('<div class="hero"><h1>Make every message meaningful.</h1><p>Transform unstructured text into clear, actionable intelligence.</p></div>', unsafe_allow_html=True)
+    analyze_tab, search_tab, history_tab = st.tabs(["✦ Analyze", "⌕ Search", "◷ History"])
     with analyze_tab:
         mode = st.radio("Input type", ["Paste text", "Upload document"], horizontal=True)
-        text = ""
-        name = "pasted-text"
+        text, name = st.session_state.pop("sample_text", ""), "pasted-text"
         if mode == "Paste text":
             name = st.text_input("Document name", value="pasted-text")
-            text = st.text_area("Email or document text", height=220, placeholder="Paste text here...")
+            text = st.text_area("Email or document text", value=text, height=220, placeholder="Paste an email, support request, or document excerpt here…")
+            st.caption("Tip: try one of the sample prompts in the sidebar.")
         else:
             uploaded = st.file_uploader("Upload TXT, CSV, PDF, or DOCX", type=["txt", "csv", "pdf", "docx"])
             if uploaded:
@@ -73,39 +111,49 @@ def main() -> None:
                 try:
                     text = extract_text(temporary)
                 except ExtractionError as exc:
-                    st.error(str(exc))
+                    st.error(f"We couldn't read that file: {exc}")
                 finally:
                     temporary.unlink(missing_ok=True)
                 st.text_area("Extracted text", text, height=160, disabled=True)
-        if st.button("Analyze and save", type="primary"):
+            else:
+                st.markdown('<div class="empty">Drop a document here to extract and analyze its text.</div>', unsafe_allow_html=True)
+        if st.button("Analyze and save  →", type="primary", use_container_width=True):
             try:
-                result = analyze_text(validate_text(text))
-                document_id = save_result(name or "pasted-text", result)
-                st.success(f"Saved document #{document_id}")
+                clean_text = validate_text(text)
+                with st.spinner("Finding the signals in your text…"):
+                    result = analyze_text(clean_text)
+                    document_id = save_result(name or "pasted-text", result)
+                st.success(f"Analysis saved to history as document #{document_id}.")
                 render_result(result, st)
             except (ValueError, ExtractionError) as exc:
                 st.error(str(exc))
-
+            except Exception as exc:
+                st.error(f"Analysis unavailable right now: {exc}")
     with search_tab:
-        query = st.text_input("Search similar documents", placeholder="invoice overdue customer")
-        if st.button("Search") and query.strip():
-            try:
-                engine = SearchEngine(DATABASE.list_documents())
-                results = engine.search(query, limit=20)
-                if results:
-                    st.dataframe(results, use_container_width=True)
-                else:
-                    st.info("No similar documents found.")
-            except RuntimeError as exc:
-                st.error(str(exc))
-
+        st.markdown("### Find related documents")
+        st.caption("Search your saved analyses by meaning, topic, or phrase.")
+        query = st.text_input("Search query", placeholder="invoice overdue customer")
+        if st.button("Search documents", type="primary"):
+            if not query.strip():
+                st.warning("Enter a search phrase first.")
+            else:
+                try:
+                    with st.spinner("Searching your document intelligence…"):
+                        results = SearchEngine(DATABASE.list_documents()).search(query, limit=20)
+                    if results:
+                        st.dataframe(results, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No similar documents found. Try a broader phrase.")
+                except RuntimeError as exc:
+                    st.error(str(exc))
     with history_tab:
         records = DATABASE.list_documents(limit=100)
-        st.metric("Stored documents", len(records))
+        st.markdown("### Your analysis history")
+        st.metric("Stored documents", len(records), help="Documents saved from the Analyze tab")
         if records:
-            st.dataframe(records, use_container_width=True)
+            st.dataframe(records, use_container_width=True, hide_index=True)
         else:
-            st.info("Analyze a document to create history.")
+            st.markdown('<div class="empty">Your saved analyses will appear here.<br>Run your first analysis to start building history.</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

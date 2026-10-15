@@ -7,7 +7,7 @@ from typing import Any
 from .classifier import classify
 from .entities import extract_entities
 from .keywords import extract_keywords
-from .preprocessing import normalize_text
+from .preprocessing import normalize_text, sentences
 from .sentiment import analyze_sentiment
 from .summarization import summarize
 from .urgency import assess_urgency
@@ -21,12 +21,21 @@ def analyze_text(text: str) -> dict[str, Any]:
     classification = classify(normalized)
     sentiment = analyze_sentiment(normalized)
     urgency = assess_urgency(normalized)
+    entities = [{"text": entity.text, "type": entity.type} for entity in extract_entities(normalized)]
+    summary = summarize(normalized)
+    keywords = extract_keywords(normalized)
     return {
         "text": normalized,
         "classification": {"label": classification.label, "confidence": classification.confidence, "matched_terms": classification.matched_terms},
         "sentiment": {"label": sentiment.label, "score": sentiment.score, "positive_terms": sentiment.positive_terms, "negative_terms": sentiment.negative_terms},
         "urgency": {"level": urgency.level, "score": urgency.score, "matched_terms": urgency.matched_terms},
-        "entities": [{"text": entity.text, "type": entity.type} for entity in extract_entities(normalized)],
-        "summary": summarize(normalized),
-        "keywords": extract_keywords(normalized),
+        "entities": entities,
+        "summary": summary,
+        "keywords": keywords,
+        "processing_summary": {
+            "sentence_count": len(sentences(normalized)),
+            "entity_count": len(entities),
+            "keyword_count": len(keywords),
+            "summary_sentence_count": len(sentences(summary)),
+        },
     }
