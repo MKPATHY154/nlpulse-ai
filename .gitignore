@@ -10,4 +10,3 @@ data/processed/
 models/
 *.db
 *.sqlite3
-data/gmail_token*
