@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .streamlit/
+.opencode/
 .env
 data/raw/
 data/processed/
