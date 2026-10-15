@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NLPulse AI</title>
+  <style>
+    :root { color-scheme: dark; --bg:#08111f; --panel:#111d31; --line:#263957; --text:#e9f0ff; --muted:#9fb0ca; --accent:#6ee7b7; }
+    * { box-sizing:border-box; } body { margin:0; font:16px system-ui, sans-serif; background:linear-gradient(135deg,#08111f,#10233b); color:var(--text); min-height:100vh; }
+    main { max-width:1050px; margin:0 auto; padding:48px 20px; } header { margin-bottom:26px; } h1 { font-size:42px; margin:0 0 8px; } p { color:var(--muted); } .grid { display:grid; grid-template-columns:1.2fr .8fr; gap:20px; } .card { background:rgba(17,29,49,.92); border:1px solid var(--line); border-radius:18px; padding:22px; box-shadow:0 16px 50px #0003; } textarea { width:100%; min-height:220px; resize:vertical; background:#0a1527; color:var(--text); border:1px solid var(--line); border-radius:12px; padding:14px; font:inherit; } button { border:0; border-radius:10px; padding:12px 18px; background:var(--accent); color:#062017; font-weight:700; cursor:pointer; margin-top:14px; } button:disabled { opacity:.6; cursor:wait; } .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:16px 0; } .metric { background:#0b1729; border-radius:12px; padding:13px; } .metric small { display:block; color:var(--muted); } .metric strong { display:block; margin-top:5px; font-size:18px; } pre { white-space:pre-wrap; word-break:break-word; color:#c7d5ee; background:#0a1527; border-radius:12px; padding:14px; max-height:370px; overflow:auto; } a { color:var(--accent); } @media(max-width:760px){.grid{grid-template-columns:1fr} h1{font-size:34px}.metrics{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <header><h1>🧠 NLPulse AI</h1><p>Intelligent document and email understanding, classification, and information extraction.</p></header>
+  <section class="grid">
+    <div class="card"><h2>Analyze text</h2><p>Paste an email, support request, invoice note, or document excerpt.</p><textarea id="text" placeholder="Example: Urgent: the invoice is overdue and payment must be completed before Friday."></textarea><button id="run">Analyze with NLPulse AI</button><p id="status"></p></div>
+    <div class="card"><h2>Analysis</h2><div class="metrics"><div class="metric"><small>Classification</small><strong id="classification">—</strong></div><div class="metric"><small>Sentiment</small><strong id="sentiment">—</strong></div><div class="metric"><small>Urgency</small><strong id="urgency">—</strong></div></div><h3>Summary</h3><p id="summary">Your result will appear here.</p><h3>Entities & keywords</h3><pre id="details">—</pre></div>
+  </section>
+  <p style="margin-top:24px"><a href="/api/docs" target="_blank">Open API documentation</a></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+$("run").onclick = async () => {
+  const text = $("text").value.trim(); if (!text) { $("status").textContent = "Enter some text first."; return; }
+  $("run").disabled = true; $("status").textContent = "Analyzing…";
+  try {
+    const response = await fetch("/api/analyze", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text, persist:false}) });
+    const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Analysis failed");
+    $("classification").textContent = data.classification.label; $("sentiment").textContent = data.sentiment.label; $("urgency").textContent = data.urgency.level;
+    $("summary").textContent = data.summary || "No summary available."; $("details").textContent = JSON.stringify({entities:data.entities, keywords:data.keywords}, null, 2); $("status").textContent = "Analysis complete.";
+  } catch (error) { $("status").textContent = error.message; } finally { $("run").disabled = false; }
+};
+</script>
+</body>
+</html>

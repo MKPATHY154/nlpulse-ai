@@ -92,3 +92,5 @@ api/index.py
 ```
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for Vercel API and Streamlit dashboard deployment instructions. Vercel's filesystem is ephemeral, so use external database storage for production persistence.
+
+The Vercel deployment also includes a browser UI at the site root. The Streamlit dashboard remains available for local or Streamlit Cloud deployment.

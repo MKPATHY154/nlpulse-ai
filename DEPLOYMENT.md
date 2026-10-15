@@ -2,9 +2,9 @@
 
 ## Vercel: FastAPI API
 
-Vercel can host the FastAPI API as a Python serverless function. It cannot run the Streamlit dashboard as a persistent process.
+Vercel can host the FastAPI API as a Python serverless function. The repository now also includes a static browser interface at the root `index.html`.
 
-The API entry point is `api/index.py`; the rewrite in `vercel.json` sends public paths such as `/health` and `/docs` to that FastAPI function.
+The API entry point is `api/index.py`. The browser interface calls `/api/analyze`, and the API documentation is available at `/api/docs`.
 
 1. Push this project to GitHub.
 2. Import the repository at <https://vercel.com/new>.
