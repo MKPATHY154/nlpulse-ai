@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from src.database import Database
@@ -51,11 +52,13 @@ def _persist(name: str, text: str, result: dict[str, Any], source: str = "api") 
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "documents": len(DATABASE.list_documents())}
 
 
 @app.post("/analyze")
+@app.post("/api/analyze")
 def analyze(request: AnalyzeRequest) -> dict[str, Any]:
     try:
         result = analyze_text(request.text)
@@ -102,11 +105,13 @@ def document(document_id: int) -> dict[str, Any]:
 
 
 @app.post("/search")
+@app.post("/api/search")
 def search(request: SearchRequest) -> list[dict[str, Any]]:
     return SEARCH.search(request.query, limit=request.limit)
 
 
 @app.post("/models/train")
+@app.post("/api/models/train")
 def train_model(algorithm: str = Query(default="logistic")) -> dict[str, Any]:
     """Train the optional learned classifier using its configured dataset."""
     from src.ml_classifier import TextClassifier
@@ -116,3 +121,18 @@ def train_model(algorithm: str = Query(default="logistic")) -> dict[str, Any]:
         return {"status": "trained", "algorithm": model.algorithm, "classes": sorted(model.model.classes_)}
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/docs", include_in_schema=False)
+def api_docs() -> RedirectResponse:
+    """Support the browser-friendly API documentation path used by the UI."""
+    return RedirectResponse(url="/docs")
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def browser_app() -> HTMLResponse:
+    """Serve the browser interface when Vercel routes the root to Python."""
+    page = ROOT / "index.html"
+    if page.exists():
+        return HTMLResponse(page.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>NLPulse AI</h1><p>API is running. Open /docs.</p>")
