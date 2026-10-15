@@ -48,7 +48,10 @@ Then open `http://127.0.0.1:8000/docs` for the interactive API documentation.
 | `POST /documents/upload` | Extract, analyze, and save TXT, CSV, PDF, or DOCX |
 | `GET /documents` | List stored documents |
 | `GET /documents/{id}` | Read a document, its analyses, and entities |
+| `DELETE /documents/{id}` | Delete a document and its related results |
 | `POST /search` | TF-IDF cosine similarity search |
+| `GET /analytics/overview` | Category, sentiment, urgency, and recent-document analytics |
+| `GET /documents/export.csv` | Export filtered document metadata as CSV |
 | `POST /models/train` | Train the CPU-friendly learned classifier |
 
 Example:
@@ -81,6 +84,17 @@ data/            Local SQLite database and user-generated files
 ## Current model limitations
 
 The default analysis pipeline is intentionally transparent and deterministic. Its rules are a baseline, not a claim of production-level accuracy. The learned classifier uses a small built-in dataset so that the complete training flow can be demonstrated; replace it with a properly labeled project dataset before reporting model performance.
+
+## Train and evaluate a learned classifier
+
+Use the included labeled sample as a workflow example:
+
+```powershell
+python scripts/train_model.py data/sample_training.csv
+python -m evaluation.evaluate data/sample_training.csv --algorithm both
+```
+
+The evaluation output reports accuracy, macro precision, macro recall, macro F1, class labels, and a confusion matrix. The included dataset is deliberately small for demonstration; do not present its score as production performance. Replace it with a larger, organization-specific labeled dataset before making model claims.
 
 ## Deployment
 
