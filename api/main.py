@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 from src.database import Database
 from src.ingestion import ExtractionError, extract_text
@@ -22,6 +23,7 @@ from src.search_engine import SearchEngine
 
 
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 DATA_DIR = Path("/tmp") if os.environ.get("VERCEL") else ROOT / "data"
 DATABASE = Database(DATA_DIR / "nlpulse.db")
 SEARCH = SearchEngine()
