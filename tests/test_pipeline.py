@@ -29,6 +29,15 @@ def test_classification_and_urgency_follow_support_rules() -> None:
     assert {"critical", "outage", "immediately"} <= set(result["urgency"]["matched_terms"])
 
 
+def test_blocked_account_is_negative_and_urgency_display_data_is_meaningful() -> None:
+    result = analyze_text("My account is blocked and I cannot access my files. Please fix this immediately.")
+
+    assert result["classification"]["label"] == "request"
+    assert result["sentiment"]["label"] == "negative"
+    assert "blocked" in result["sentiment"]["negative_terms"]
+    assert result["urgency"]["level"] == "high"
+
+
 def test_entity_extraction_finds_common_contact_entities() -> None:
     result = analyze_text("Contact support@example.com on 2026-10-16 or visit https://example.com.")
 

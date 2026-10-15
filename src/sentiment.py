@@ -18,7 +18,10 @@ class Sentiment:
 
 
 POSITIVE = frozenset("amazing awesome good great happy helpful love excellent solved thanks thank satisfied".split())
-NEGATIVE = frozenset("bad broken terrible awful angry hate unhappy poor frustrated issue problem fail failed".split())
+NEGATIVE = frozenset(
+    "bad blocked broken terrible awful angry hate unhappy poor frustrated issue problem"
+    " fail failed cannot denied inaccessible locked outage overdue".split()
+)
 
 
 def analyze_sentiment(text: str) -> Sentiment:
