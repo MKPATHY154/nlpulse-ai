@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,16 @@ def save_result(name: str, result: dict[str, Any], source: str = "dashboard") ->
     for entity in result["entities"]:
         DATABASE.save_entity(document_id, entity["text"], entity["type"])
     return document_id
+
+
+def documents_csv(records: list[dict[str, Any]]) -> str:
+    """Create a safe, correctly quoted CSV export for the dashboard."""
+    output = io.StringIO(newline="")
+    fields = ("id", "name", "category", "sentiment", "urgency", "created_at")
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows({field: record.get(field, "") for field in fields} for record in records)
+    return output.getvalue()
 
 
 def _chips(values: list[Any], st: Any, prefix: str = "") -> None:
@@ -94,7 +106,7 @@ def main() -> None:
         st.success("Analysis engine online")
         st.caption("Results are processed locally and saved to the document history when you analyze.")
     st.markdown('<div class="hero"><h1>Make every message meaningful.</h1><p>Transform unstructured text into clear, actionable intelligence.</p></div>', unsafe_allow_html=True)
-    analyze_tab, search_tab, history_tab = st.tabs(["✦ Analyze", "⌕ Search", "◷ History"])
+    analyze_tab, search_tab, history_tab, analytics_tab = st.tabs(["✦ Analyze", "⌕ Search", "◷ History", "▥ Analytics"])
     with analyze_tab:
         mode = st.radio("Input type", ["Paste text", "Upload document"], horizontal=True)
         text, name = st.session_state.pop("sample_text", ""), "pasted-text"
@@ -147,13 +159,53 @@ def main() -> None:
                 except RuntimeError as exc:
                     st.error(str(exc))
     with history_tab:
-        records = DATABASE.list_documents(limit=100)
+        st.markdown("### Filter your document history")
+        filter_left, filter_mid, filter_right = st.columns(3)
+        with filter_left:
+            category_filter = st.selectbox("Category", ["All", "complaint", "request", "question", "feedback", "other"])
+        with filter_mid:
+            sentiment_filter = st.selectbox("Sentiment", ["All", "positive", "negative", "neutral"])
+        with filter_right:
+            urgency_filter = st.selectbox("Urgency", ["All", "low", "medium", "high", "critical"])
+        records = DATABASE.list_documents(
+            limit=100,
+            category=None if category_filter == "All" else category_filter,
+            sentiment=None if sentiment_filter == "All" else sentiment_filter,
+            urgency=None if urgency_filter == "All" else urgency_filter,
+        )
         st.markdown("### Your analysis history")
         st.metric("Stored documents", len(records), help="Documents saved from the Analyze tab")
         if records:
             st.dataframe(records, use_container_width=True, hide_index=True)
+            st.download_button(
+                "Download filtered CSV",
+                data=documents_csv(records),
+                file_name="nlpulse-documents.csv",
+                mime="text/csv",
+            )
         else:
             st.markdown('<div class="empty">Your saved analyses will appear here.<br>Run your first analysis to start building history.</div>', unsafe_allow_html=True)
+
+    with analytics_tab:
+        st.markdown("### Intelligence overview")
+        overview = DATABASE.analytics_overview(recent_limit=5)
+        metric_columns = st.columns(4)
+        metric_columns[0].metric("Documents", overview["document_count"])
+        metric_columns[1].metric("Urgent", sum(value for key, value in overview["urgency_distribution"].items() if key in {"high", "critical"}))
+        metric_columns[2].metric("Negative", overview["sentiment_distribution"].get("negative", 0))
+        metric_columns[3].metric("Categories", len(overview["category_distribution"]))
+        chart_left, chart_right = st.columns(2)
+        with chart_left:
+            st.markdown("#### Category distribution")
+            st.bar_chart(overview["category_distribution"] or {"none": 0})
+        with chart_right:
+            st.markdown("#### Urgency distribution")
+            st.bar_chart(overview["urgency_distribution"] or {"none": 0})
+        st.markdown("#### Recent documents")
+        if overview["recent_documents"]:
+            st.dataframe(overview["recent_documents"], use_container_width=True, hide_index=True)
+        else:
+            st.info("Analyze a document to populate analytics.")
 
 
 if __name__ == "__main__":

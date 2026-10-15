@@ -5,11 +5,13 @@ from __future__ import annotations
 import shutil
 import tempfile
 import os
+import csv
+import io
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from src.database import Database
@@ -43,7 +45,14 @@ class SearchRequest(BaseModel):
 
 
 def _persist(name: str, text: str, result: dict[str, Any], source: str = "api") -> dict[str, Any]:
-    document_id = DATABASE.create_document(name=name, content=text, source=source)
+    document_id = DATABASE.create_document(
+        name=name,
+        content=text,
+        source=source,
+        category=result.get("classification", {}).get("label"),
+        sentiment=result.get("sentiment", {}).get("label"),
+        urgency=result.get("urgency", {}).get("level"),
+    )
     DATABASE.save_analysis(document_id, result)
     for entity in result["entities"]:
         DATABASE.save_entity(document_id, entity["text"], entity["type"])
@@ -90,8 +99,82 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, Any]:
 
 
 @app.get("/documents")
-def documents(limit: int = Query(default=50, ge=1, le=500), offset: int = Query(default=0, ge=0)) -> list[dict[str, Any]]:
-    return DATABASE.list_documents(limit=limit, offset=offset)
+def documents(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    query: str | None = Query(default=None, max_length=500),
+    search: str | None = Query(default=None, max_length=500),
+    category: str | None = Query(default=None, max_length=100),
+    sentiment: str | None = Query(default=None, max_length=50),
+    urgency: str | None = Query(default=None, max_length=50),
+    created_after: str | None = Query(default=None, max_length=40),
+    created_before: str | None = Query(default=None, max_length=40),
+    date_from: str | None = Query(default=None, max_length=40),
+    date_to: str | None = Query(default=None, max_length=40),
+) -> list[dict[str, Any]]:
+    return DATABASE.list_documents(
+        limit=limit,
+        offset=offset,
+        query=query or search,
+        category=category,
+        sentiment=sentiment,
+        urgency=urgency,
+        created_after=created_after or date_from,
+        created_before=created_before or date_to,
+    )
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: int) -> dict[str, Any]:
+    if not DATABASE.delete_document(document_id):
+        raise HTTPException(status_code=404, detail="Document not found")
+    SEARCH.rebuild_from_database(DATABASE)
+    return {"deleted": True, "document_id": document_id}
+
+
+@app.get("/analytics/overview")
+def analytics_overview(recent_limit: int = Query(default=10, ge=0, le=100)) -> dict[str, Any]:
+    return DATABASE.analytics_overview(recent_limit=recent_limit)
+
+
+def _csv_value(value: Any) -> str:
+    """Prevent spreadsheet formula execution while retaining valid CSV data."""
+    text = "" if value is None else str(value)
+    return "'" + text if text.startswith(("=", "+", "-", "@")) else text
+
+
+@app.get("/documents/export.csv")
+def export_documents_csv(
+    query: str | None = Query(default=None, max_length=500),
+    search: str | None = Query(default=None, max_length=500),
+    category: str | None = Query(default=None, max_length=100),
+    sentiment: str | None = Query(default=None, max_length=50),
+    urgency: str | None = Query(default=None, max_length=50),
+    created_after: str | None = Query(default=None, max_length=40),
+    created_before: str | None = Query(default=None, max_length=40),
+    date_from: str | None = Query(default=None, max_length=40),
+    date_to: str | None = Query(default=None, max_length=40),
+) -> Response:
+    documents = DATABASE.list_documents(
+        limit=None,
+        query=query or search,
+        category=category,
+        sentiment=sentiment,
+        urgency=urgency,
+        created_after=created_after or date_from,
+        created_before=created_before or date_to,
+    )
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    fields = ("id", "name", "content", "source", "created_at", "category", "sentiment", "urgency")
+    writer.writerow(fields)
+    for item in documents:
+        writer.writerow([_csv_value(item.get(field)) for field in fields])
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=documents.csv"},
+    )
 
 
 @app.get("/documents/{document_id}")
