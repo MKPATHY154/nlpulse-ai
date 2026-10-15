@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from src.database import Database
 from src.ingestion import ExtractionError, extract_text
 from src.pipeline import analyze_text
+from src.gmail_connector import GmailConfigurationError, GmailConnector
 from src.search_engine import SearchEngine
 
 
@@ -58,6 +59,60 @@ def _persist(name: str, text: str, result: dict[str, Any], source: str = "api") 
         DATABASE.save_entity(document_id, entity["text"], entity["type"])
     SEARCH.add({"id": document_id, "name": name, "content": text, "source": source})
     return {"document_id": document_id, "analysis": result}
+
+
+def _gmail_error(exc: GmailConfigurationError) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/integrations/gmail/status")
+def gmail_status() -> dict[str, Any]:
+    return GmailConnector().status()
+
+
+@app.get("/integrations/gmail/start")
+def gmail_start() -> dict[str, str]:
+    try:
+        return {"authorization_url": GmailConnector().authorization_url()}
+    except GmailConfigurationError as exc:
+        raise _gmail_error(exc) from exc
+
+
+@app.get("/integrations/gmail/callback")
+def gmail_callback(code: str | None = None, error: str | None = None, state: str | None = None) -> dict[str, Any]:
+    if error:
+        raise HTTPException(status_code=400, detail=f"Gmail authorization failed: {error}")
+    if not code:
+        raise HTTPException(status_code=400, detail="Gmail callback did not include an authorization code")
+    try:
+        # Passing the code is sufficient for Google and avoids trusting unrelated query fields.
+        return GmailConnector().exchange_callback(code=code)
+    except GmailConfigurationError as exc:
+        raise _gmail_error(exc) from exc
+
+
+@app.post("/integrations/gmail/sync")
+def gmail_sync(max_results: int = Query(default=50, ge=1, le=500)) -> dict[str, Any]:
+    try:
+        messages = GmailConnector().sync(max_results=max_results)
+        imported = []
+        for message in messages:
+            text = "\n".join(filter(None, [message.get("subject", ""), message.get("sender", ""), message.get("body", "")]))
+            result = analyze_text(text)
+            imported.append({"message": message, **_persist(message.get("subject") or message.get("id") or "gmail-message", result["text"], result, source="gmail")})
+        return {"synced": len(imported), "messages": imported}
+    except GmailConfigurationError as exc:
+        raise _gmail_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/integrations/gmail/disconnect")
+def gmail_disconnect() -> dict[str, Any]:
+    try:
+        return GmailConnector().disconnect()
+    except GmailConfigurationError as exc:
+        raise _gmail_error(exc) from exc
 
 
 @app.get("/health")

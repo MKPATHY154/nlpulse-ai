@@ -60,6 +60,22 @@ Then open `http://127.0.0.1:8000/docs` for the interactive API documentation.
 | `GET /documents/export.csv` | Export filtered document metadata as CSV |
 | `POST /models/train` | Train the CPU-friendly learned classifier |
 
+## Gmail integration
+
+NLPulse AI includes an optional **read-only Gmail connector**. It never asks for or stores a Gmail password. Configure Google OAuth credentials using the variables in `.env.example`, register the callback URL in Google Cloud, then open:
+
+```text
+http://127.0.0.1:8000/integrations/gmail/start
+```
+
+After authorization, sync the inbox with:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/integrations/gmail/sync
+```
+
+The messages are analyzed by NLPulse and saved with `source=gmail`. The UI also includes a **Connect Gmail** action. Never commit real client secrets or token files; use environment variables and keep the token path private.
+
 Example:
 
 ```powershell

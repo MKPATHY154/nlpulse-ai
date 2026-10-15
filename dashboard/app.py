@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.database import Database
+from src.gmail_connector import GmailConfigurationError, GmailConnector
 from src.ingestion import ExtractionError, extract_text
 from src.pipeline import analyze_text
 from src.search_engine import SearchEngine
@@ -105,6 +106,30 @@ def main() -> None:
         st.markdown("**Pipeline**")
         st.success("Analysis engine online")
         st.caption("Results are processed locally and saved to the document history when you analyze.")
+        st.divider()
+        st.markdown("**Gmail inbox**")
+        gmail = GmailConnector()
+        gmail_status = gmail.status()
+        if gmail_status["connected"]:
+            st.success("Gmail connected (read-only)")
+            if st.button("Sync Gmail inbox", use_container_width=True):
+                try:
+                    with st.spinner("Syncing and analyzing Gmail messages…"):
+                        messages = gmail.sync(max_results=50)
+                        for message in messages:
+                            text = "\n".join(filter(None, [message.get("subject", ""), message.get("sender", ""), message.get("body", "")]))
+                            result = analyze_text(text)
+                            save_result(message.get("subject") or message.get("id") or "gmail-message", result, source="gmail")
+                    st.success(f"Synced {len(messages)} Gmail messages.")
+                except GmailConfigurationError as exc:
+                    st.error(str(exc))
+        elif gmail_status["configured"]:
+            try:
+                st.link_button("Connect Gmail (read-only)", gmail.authorization_url(), use_container_width=True)
+            except GmailConfigurationError as exc:
+                st.warning(str(exc))
+        else:
+            st.caption("Set Gmail OAuth environment variables to connect your inbox securely.")
     st.markdown('<div class="hero"><h1>Make every message meaningful.</h1><p>Transform unstructured text into clear, actionable intelligence.</p></div>', unsafe_allow_html=True)
     analyze_tab, search_tab, history_tab, analytics_tab = st.tabs(["✦ Analyze", "⌕ Search", "◷ History", "▥ Analytics"])
     with analyze_tab:
