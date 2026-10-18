@@ -6,7 +6,7 @@ NLPulse AI turns unstructured emails and documents into searchable, structured i
 
 ## Live application preview
 
-![NLPulse AI live application](docs/live-app-screenshot.png)
+![NLPulse AI live application](screenshorts/live-analysis.png)
 
 The screenshot shows the live analysis workflow with classification, sentiment, urgency, summary, entities, and extracted keywords.
 
